@@ -1,0 +1,13 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On               # Activa el motor de redirecciones.
+  RewriteBase /                  # Define la raíz de la web como base.
+  RewriteRule ^index\.html$ - [L] # Si piden el index.html directamente, déjalos pasar.
+  
+  # ¿Lo que pide el usuario NO es un archivo real?
+  RewriteCond %{REQUEST_FILENAME} !-f 
+  # ¿Lo que pide el usuario NO es una carpeta real?
+  RewriteCond %{REQUEST_FILENAME} !-d 
+  
+  # Si se cumplen ambas, mándalo al index.html para que React lo gestione.
+  RewriteRule . /index.html [L] 
+</IfModule>
