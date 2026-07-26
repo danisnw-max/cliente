@@ -35,27 +35,7 @@ import {
 } from 'lucide-react';
 
 
-// --- BASE DE DATOS DEL PROTOCOLO DELUXE DE DEPURACIÓN ---
-const SYSTEM_ROUTINES = {
-  phase1: [
-    { id: 'p1_1', time: '08:00 AM', title: 'Extracto Fluido de Aloe Vera', type: 'EN AYUNAS', description: '20-30 ml disueltos en un vaso de agua tibia. Regeneración de la mucosa y cicatrización gástrica.' },
-    { id: 'p1_2', time: '03:00 PM', title: 'Infusión Digestiva Funcional', type: 'POST-ALMUERZO', description: '1 taza (Hinojo, Anís Verde, Manzanilla y Regaliz). Reducción de la fermentación y prevención de gases.' },
-    { id: 'p1_3', time: '09:30 PM', title: 'Infusión Digestiva Funcional', type: 'POST-CENA', description: '1 taza (Misma mezcla digestiva de la tarde). Relajación de la musculatura lisa intestinal.' },
-    { id: 'p1_4', time: '11:00 PM', title: 'Probióticos de Amplio Espectro', type: 'ANTES DE DORMIR', description: '1 cápsula (Mínimo 50 billones de UFC). Repoblación, equilibrio de la microbiota y refuerzo de barrera.' }
-  ],
-  phase2: [
-    { id: 'p2_1', time: '08:00 AM', title: 'Aceite Esencial de Limón (QT)', type: 'EN AYUNAS', description: '1 gota en una cucharadita de aceite de oliva virgen extra. Estímulo hepato-biliar matutino y antioxidante.' },
-    { id: 'p2_2', time: '01:30 PM', title: 'Cardo Mariano y Desmodium', type: 'ANTES DEL ALMUERZO', description: 'Extracto estandarizado de alta concentración (rico en silimarina). Hepatoprotección celular profunda.' },
-    { id: 'p2_3', time: '03:00 PM', title: 'Infusión Hepática Amarga', type: 'POST-ALMUERZO', description: '1 taza (Diente de León y Alcachofera). Estímulo del flujo biliar y la correcta digestión de grasas.' },
-    { id: 'p2_4', time: '09:30 PM', title: 'Infusión Hepática Amarga', type: 'POST-CENA', description: '1 taza (Misma mezcla amarga). Soporte botánico al ciclo circadiano de detoxificación nocturna.' }
-  ],
-  phase3: [
-    { id: 'p3_1', time: '08:00 AM', title: 'Extracto de Ortiga Verde y Vara de Oro', type: 'EN AYUNAS', description: '30 gotas diluidas en un vaso grande de agua. Estímulo de la filtración glomerular y drenaje linfático.' },
-    { id: 'p3_2', time: '11:30 AM', title: 'Infusión Drenante y Remineralizante', type: 'MEDIA MAÑANA', description: '1 taza (Cola de Caballo y Abedul). Aumento de la diuresis aportando silicio y minerales protectores.' },
-    { id: 'p3_3', time: '03:00 PM', title: 'Extracto de Ortiga Verde y Vara de Oro', type: 'POST-ALMUERZO', description: '30 gotas diluidas en agua. Mantenimiento de la tasa de filtración y arrastre continuo de metabolitos.' },
-    { id: 'p3_4', time: '06:30 PM', title: 'Infusión Drenante y Remineralizante', type: 'MEDIA TARDE', description: '1 taza (Cola de Caballo y Abedul). Último estímulo diurético. Se evita pautar más tarde para preservar el sueño.' }
-  ]
-};
+// Las tareas ahora se cargan dinámicamente desde la tabla plan_days_tasks en Supabase.
 
 
 const QUALITY_PRODUCTS = [
@@ -81,12 +61,7 @@ const HISTORIAL_PACKS = [
   { id: 'h2', title: 'Módulo Energía & Adaptógenos', date: 'MAY 2026', status: 'Completado', iconColor: 'text-amber-400', bgGlow: 'bg-amber-500/10', borderColor: 'border-amber-500/20' }
 ];
 
-const CONTRAINDICACIONES_DATA = [
-  { id: 1, name: 'Anticoagulantes Orales', risk: 'Alto', description: 'El Cardo Mariano puede potenciar el efecto anticoagulante. Consultar ajuste.', status: 'critical' },
-  { id: 2, name: 'Antidiabéticos', risk: 'Medio', description: 'El extracto de alcachofera puede potenciar la bajada de glucosa. Vigilar niveles.', status: 'warning' },
-  { id: 3, name: 'Diuréticos de síntesis', risk: 'Alto', description: 'No combinar la Fase 3 (Vara de oro/Ortiga) con fármacos diuréticos sin control médico.', status: 'critical' },
-  { id: 4, name: 'Ibuprofeno / AINES', risk: 'Seguro', description: 'Sin interacciones detectadas con la formulación natural pautada.', status: 'safe' }
-];
+// Las alertas y contraindicaciones se cargan dinámicamente desde la tabla plan_alerts en Supabase.
 
 const CONTINGENCIA_DATA = [
   { 
@@ -133,7 +108,7 @@ export default function App() {
   const [subscription, setSubscription] = useState(null);
 
   // --- ESTADO GLOBAL DE SEGUIMIENTO (1 a 21 días) ---
-  const [currentDay, setCurrentDay] = useState(4); // Inicializado en el Día 4 de prueba
+  const [currentDay, setCurrentDay] = useState(1);
   
   // Guardamos las tareas completadas estructuradas por día: { [dia]: { [tareaId]: true/false } }
   const [completedTasks, setCompletedTasks] = useState({});
@@ -141,8 +116,15 @@ export default function App() {
   // Guardamos la telemetría corporal (bienestar) por día: { [dia]: valor_1_a_5 }
   const [telemetryByDay, setTelemetryByDay] = useState({});
 
+  // --- ESTADOS DE TAREAS Y ALERTAS DE SUPABASE ---
+  const [planTasks, setPlanTasks] = useState([]);
+  const [planAlerts, setPlanAlerts] = useState([]);
+  const [planPhases, setPlanPhases] = useState([]);
+  const [planProducts, setPlanProducts] = useState([]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [showPillars, setShowPillars] = useState(false);
+  const [selectedPhaseFilter, setSelectedPhaseFilter] = useState('ALL');
 
   // Escucha de sesión de Supabase
   useEffect(() => {
@@ -188,6 +170,19 @@ export default function App() {
       if (data && data.length > 0) {
         const activeSub = data[0];
         setSubscription(activeSub);
+
+        // Calcular el día actual automáticamente basado en la fecha de activación
+        const startDate = new Date(activeSub.activated_at);
+        const today = new Date();
+        // Ponemos la hora a 00:00 para calcular días completos
+        startDate.setHours(0, 0, 0, 0);
+        today.setHours(0, 0, 0, 0);
+        const diffTime = today.getTime() - startDate.getTime();
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+        
+        // Si el resultado es menor a 1 (por zonas horarias etc), forzamos a 1
+        setCurrentDay(Math.max(1, diffDays));
+
         // Cargar datos de progreso y telemetría si hay suscripción
         await loadUserData(userId, activeSub.plan_id);
       } else {
@@ -233,48 +228,102 @@ export default function App() {
         telemetryObj[row.day] = row.value;
       });
       setTelemetryByDay(telemetryObj);
+
+      // Cargar tareas dinámicas del plan
+      const { data: tasksData, error: tasksErr } = await supabase
+        .from('plan_days_tasks')
+        .select('*')
+        .eq('plan_id', planId)
+        .order('created_at', { ascending: true });
+
+      if (tasksErr) throw tasksErr;
+      setPlanTasks(tasksData || []);
+
+      // Cargar alertas del plan
+      const { data: alertsData, error: alertsErr } = await supabase
+        .from('plan_alerts')
+        .select('*')
+        .eq('plan_id', planId);
+
+      if (alertsErr) throw alertsErr;
+      setPlanAlerts(alertsData || []);
+
+      // Cargar fases del plan
+      const { data: phasesData, error: phasesErr } = await supabase
+        .from('plan_phases')
+        .select('*')
+        .eq('plan_id', planId)
+        .order('day_start', { ascending: true });
+
+      if (phasesErr) throw phasesErr;
+      setPlanPhases(phasesData || []);
+
+      // Cargar productos del plan
+      const { data: productsData, error: productsErr } = await supabase
+        .from('plan_products')
+        .select('*')
+        .eq('plan_id', planId)
+        .order('created_at', { ascending: true });
+
+      if (productsErr) throw productsErr;
+      setPlanProducts(productsData || []);
+
     } catch (err) {
       console.error('Error cargando datos del usuario:', err);
     }
   };
 
+  // --- FORMATO DE CATEGORÍA DE TAREA ---
+  const getCategoryLabel = (cat) => {
+    switch (cat) {
+      case 'suplemento': return 'Suplemento Botánico';
+      case 'nutricion': return 'Nutrición / Dieta';
+      case 'habito': return 'Hábito / Estilo de Vida';
+      case 'ejercicio': return 'Ejercicio / Movimiento';
+      default: return cat;
+    }
+  };
+
   // --- OBTENER FASE Y CONFIGURACIÓN SEGÚN EL DÍA SELECCIONADO ---
   const getPhaseConfig = (day) => {
+    const dayTasks = planTasks.filter(t => t.day === day);
+    const dbPhaseName = dayTasks.find(t => t.phase)?.phase;
+
     if (day >= 1 && day <= 7) {
       return {
         key: 'phase1',
-        title: 'Reset Digestivo',
+        title: dbPhaseName || 'Reset Digestivo',
         subtitle: 'Fase 01: Purificación Intestinal',
         colorClass: 'emerald',
         textColor: 'text-emerald-500',
         borderColor: 'border-emerald-500',
         bgAccent: 'bg-emerald-500',
         bgGlow: 'bg-emerald-500/20',
-        tasks: SYSTEM_ROUTINES.phase1
+        tasks: dayTasks
       };
     } else if (day >= 8 && day <= 14) {
       return {
         key: 'phase2',
-        title: 'Drenaje Hepático',
+        title: dbPhaseName || 'Drenaje Hepático Profundo',
         subtitle: 'Fase 02: Purificación Celular',
         colorClass: 'indigo',
         textColor: 'text-indigo-400',
         borderColor: 'border-indigo-500',
         bgAccent: 'bg-indigo-500',
         bgGlow: 'bg-indigo-500/20',
-        tasks: SYSTEM_ROUTINES.phase2
+        tasks: dayTasks
       };
     } else {
       return {
         key: 'phase3',
-        title: 'Lavado Renal',
+        title: dbPhaseName || 'Lavado Renal y Remineralización',
         subtitle: 'Fase 03: Eliminación e Hidratación',
         colorClass: 'cyan',
         textColor: 'text-cyan-400',
         borderColor: 'border-cyan-500',
         bgAccent: 'bg-cyan-500',
         bgGlow: 'bg-cyan-500/20',
-        tasks: SYSTEM_ROUTINES.phase3
+        tasks: dayTasks
       };
     }
   };
@@ -284,8 +333,9 @@ export default function App() {
   // --- CALCULO DE ADHERENCIA DEL DÍA SELECCIONADO ---
   const getDayProgress = (day) => {
     const phaseTasks = getPhaseConfig(day).tasks;
+    if (!phaseTasks || phaseTasks.length === 0) return 0;
     const dayCompletions = completedTasks[day] || {};
-    const completedCount = phaseTasks.filter(task => dayCompletions[task.id]).length;
+    const completedCount = phaseTasks.filter(task => dayCompletions[task.task_id]).length;
     return Math.round((completedCount / phaseTasks.length) * 100);
   };
 
@@ -293,16 +343,17 @@ export default function App() {
 
   // --- CALCULO DE ADHERENCIA GLOBAL ---
   const getGlobalAdherence = () => {
+    if (!planTasks || planTasks.length === 0) return 0;
     let totalTasksCount = 0;
     let completedTasksCount = 0;
     
     for (let day = 1; day <= 21; day++) {
-      const phaseTasks = getPhaseConfig(day).tasks;
+      const dayTasks = planTasks.filter(t => t.day === day);
       const dayCompletions = completedTasks[day] || {};
-      totalTasksCount += phaseTasks.length;
-      completedTasksCount += phaseTasks.filter(task => dayCompletions[task.id]).length;
+      totalTasksCount += dayTasks.length;
+      completedTasksCount += dayTasks.filter(task => dayCompletions[task.task_id]).length;
     }
-    return Math.round((completedTasksCount / totalTasksCount) * 100);
+    return totalTasksCount > 0 ? Math.round((completedTasksCount / totalTasksCount) * 100) : 0;
   };
 
   const globalAdherence = getGlobalAdherence();
@@ -614,133 +665,188 @@ export default function App() {
 
         {/* Listado de tareas diarias dinámicas */}
         <div className="space-y-4">
-          {currentPhase.tasks.map((task) => {
-            const isCompleted = !!dayCompletions[task.id];
+          {currentPhase.tasks.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-[24px] border border-slate-200/80 shadow-md">
+              <Clock className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+              <p className="text-sm font-bold text-slate-500">No hay tareas programadas para hoy.</p>
+              <p className="text-xs text-slate-400 mt-1">El administrador aún no ha añadido pautas para este día.</p>
+            </div>
+          ) : (
+            currentPhase.tasks.map((task) => {
+              const isCompleted = !!dayCompletions[task.task_id];
 
-            return (
-              <div 
-                key={task.id} 
-                onClick={() => toggleTask(task.id)} 
-                className={`p-6 rounded-[24px] border-2 transition-all duration-300 cursor-pointer relative overflow-hidden ${
-                  isCompleted ? 'bg-slate-100 border-slate-200 opacity-60' : 'bg-white border-white shadow-xl'
-                }`}
-              >
-                <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${isCompleted ? 'bg-slate-300' : currentPhase.bgAccent}`}></div>
-                
-                <div className="flex justify-between items-start mb-4 pl-2">
-                  <div className="flex items-center space-x-2">
-                    <Clock className={`w-4 h-4 ${isCompleted ? 'text-slate-400' : 'text-slate-900'}`} />
-                    <span className="text-xs font-black tracking-tight text-slate-950">{task.time}</span>
+              return (
+                <div 
+                  key={task.id} 
+                  onClick={() => toggleTask(task.task_id)} 
+                  className={`p-6 rounded-[24px] border-2 transition-all duration-300 cursor-pointer relative overflow-hidden ${
+                    isCompleted ? 'bg-slate-100 border-slate-200 opacity-60' : 'bg-white border-white shadow-xl'
+                  }`}
+                >
+                  <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${isCompleted ? 'bg-slate-300' : currentPhase.bgAccent}`}></div>
+                  
+                  <div className="flex justify-between items-start mb-4 pl-2">
+                    <div className="flex items-center space-x-2">
+                      <Clock className={`w-4 h-4 ${isCompleted ? 'text-slate-400' : 'text-slate-900'}`} />
+                      <span className="text-xs font-black tracking-tight text-slate-950">{task.time}</span>
+                    </div>
+                    <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-[8px] ${
+                      isCompleted ? 'bg-slate-200 text-slate-500' : 'bg-slate-950 text-white'
+                    }`}>
+                      {getCategoryLabel(task.category || task.type)}
+                    </span>
                   </div>
-                  <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-[8px] ${
-                    isCompleted ? 'bg-slate-200 text-slate-500' : 'bg-slate-950 text-white'
-                  }`}>
-                    {task.type}
-                  </span>
-                </div>
-                
-                <h4 className={`text-xl font-bold pl-2 mb-2 ${isCompleted ? 'text-slate-400 line-through' : 'text-slate-950'}`}>
-                  {task.title}
-                </h4>
-                
-                <p className="text-sm font-medium text-slate-500 pl-2 leading-relaxed">
-                  {task.description}
-                </p>
+                  
+                  <h4 className={`text-xl font-bold pl-2 mb-2 ${isCompleted ? 'text-slate-400 line-through' : 'text-slate-950'}`}>
+                    {task.title}
+                  </h4>
+                  
+                  <p className="text-sm font-medium text-slate-500 pl-2 leading-relaxed">
+                    {task.description}
+                  </p>
 
-                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between pl-2">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Estado</span>
-                  {isCompleted ? (
-                    <div className="flex items-center text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-[12px]">
-                      <CheckCircle2 className="w-4 h-4 mr-1.5" /> 
-                      <span className="text-xs font-bold">Verificado</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center text-slate-400 hover:text-slate-900 transition-colors px-3 py-1.5 border border-slate-200 rounded-[12px]">
-                      <Circle className="w-4 h-4 mr-1.5" /> 
-                      <span className="text-xs font-bold">Confirmar Toma</span>
-                    </div>
-                  )}
+                  <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between pl-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Estado</span>
+                    {isCompleted ? (
+                      <div className="flex items-center text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-[12px]">
+                        <CheckCircle2 className="w-4 h-4 mr-1.5" /> 
+                        <span className="text-xs font-bold">Verificado</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center text-slate-400 hover:text-slate-900 transition-colors px-3 py-1.5 border border-slate-200 rounded-[12px]">
+                        <Circle className="w-4 h-4 mr-1.5" /> 
+                        <span className="text-xs font-bold">Confirmar Toma</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </div>
     );
   };
 
 
-  const ProyeccionView = () => (
-    <div className="min-h-full bg-slate-50 text-slate-900 p-6 pb-32 animate-in fade-in duration-500">
-      <header className="mb-8">
-        <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-1">Estrategia Global</p>
-        <h2 className="text-4xl font-black italic tracking-tight text-slate-950">Proyección.</h2>
-      </header>
+  const ProyeccionView = () => {
+    const filteredProducts = selectedPhaseFilter === 'ALL' 
+      ? planProducts 
+      : planProducts.filter(p => p.phase_name === selectedPhaseFilter);
 
-      {/* Stepper del Proceso */}
-      <div className="bg-white rounded-[32px] p-8 shadow-xl border border-slate-100 relative mb-8">
-        <div className="absolute left-[31px] top-12 bottom-12 w-0.5 bg-slate-100"></div>
-        <div className="space-y-10 relative">
-          {PHASES.map((phase) => {
-            // Evaluamos estado dinámicamente según el día seleccionado
-            let status = 'future';
-            if (currentDay >= phase.range[0] && currentDay <= phase.range[1]) {
-              status = 'current';
-            } else if (currentDay > phase.range[1]) {
-              status = 'completed';
-            }
+    // Get unique phase names from products for the filter tabs
+    const productPhases = [...new Set(planProducts.map(p => p.phase_name).filter(Boolean))];
 
-            return (
-              <div key={phase.id} className="flex items-start space-x-6">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 ${
-                  status === 'completed' ? 'bg-slate-900' : status === 'current' ? 'bg-emerald-400 shadow-lg ring-4 ring-emerald-50' : 'bg-white border-2 border-slate-100'
-                }`}>
-                  {status === 'completed' ? (
-                    <Check className="w-4 h-4 text-white" />
-                  ) : (
-                    <div className={`w-2 h-2 rounded-full ${status === 'current' ? 'bg-white' : 'bg-slate-100'}`} />
-                  )}
-                </div>
-                <div>
-                  <p className={`text-[8px] font-black uppercase tracking-widest ${status === 'current' ? 'text-emerald-500' : 'text-slate-400'}`}>
-                    {phase.label} {status === 'current' ? '(ACTUAL)' : ''}
-                  </p>
-                  <h3 className={`text-xl font-black tracking-tight ${status === 'current' ? 'text-slate-950 italic' : 'text-slate-300'}`}>
-                    {phase.title}
-                  </h3>
-                  <p className="text-sm font-medium text-slate-500 mt-1 leading-relaxed">
-                    {phase.description}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
+    return (
+      <div className="min-h-full bg-slate-50 text-slate-900 p-6 pb-32 animate-in fade-in duration-500">
+        <header className="mb-8">
+          <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-1">Estrategia Global</p>
+          <h2 className="text-4xl font-black italic tracking-tight text-slate-950">Proyección.</h2>
+        </header>
+
+        {/* Stepper del Proceso */}
+        <div className="bg-white rounded-[32px] p-8 shadow-xl border border-slate-100 relative mb-8">
+          <div className="absolute left-[31px] top-12 bottom-12 w-0.5 bg-slate-100"></div>
+          <div className="space-y-10 relative">
+            {planPhases.length === 0 ? (
+              <p className="text-sm text-slate-500 italic">No hay fases configuradas en este protocolo.</p>
+            ) : (
+              planPhases.map((phase) => {
+                let status = 'future';
+                if (currentDay >= phase.day_start && currentDay <= phase.day_end) {
+                  status = 'current';
+                } else if (currentDay > phase.day_end) {
+                  status = 'completed';
+                }
+
+                return (
+                  <div key={phase.id} className="flex items-start space-x-6">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 ${
+                      status === 'completed' ? 'bg-slate-900' : status === 'current' ? 'bg-emerald-400 shadow-lg ring-4 ring-emerald-50' : 'bg-white border-2 border-slate-100'
+                    }`}>
+                      {status === 'completed' ? (
+                        <Check className="w-4 h-4 text-white" />
+                      ) : (
+                        <div className={`w-2 h-2 rounded-full ${status === 'current' ? 'bg-white' : 'bg-slate-100'}`} />
+                      )}
+                    </div>
+                    <div>
+                      <p className={`text-[8px] font-black uppercase tracking-widest ${status === 'current' ? 'text-emerald-500' : 'text-slate-400'}`}>
+                        {phase.label} {status === 'current' ? '(ACTUAL)' : ''}
+                      </p>
+                      <h3 className={`text-xl font-black tracking-tight ${status === 'current' ? 'text-slate-950 italic' : 'text-slate-300'}`}>
+                        {phase.title}
+                      </h3>
+                      <p className="text-sm font-medium text-slate-500 mt-1 leading-relaxed">
+                        {phase.description}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Catálogo de Productos y Calidad */}
-      <section className="space-y-4">
-        <div className="flex items-center space-x-2 pl-2">
-          <Sparkles className="w-4 h-4 text-amber-500" />
-          <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-800">Especificaciones de Calidad</h3>
-        </div>
+        {/* Catálogo de Productos y Calidad */}
+        <section className="space-y-4">
+          <div className="flex items-center space-x-2 pl-2">
+            <Sparkles className="w-4 h-4 text-amber-500" />
+            <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-800">Especificaciones de Calidad</h3>
+          </div>
 
-        <div className="space-y-3">
-          {QUALITY_PRODUCTS.map((prod, idx) => (
-            <div key={idx} className="bg-white rounded-[20px] p-5 border border-slate-100 shadow-sm flex justify-between items-start">
-              <div>
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-1">
-                  {prod.fase}
-                </span>
-                <h4 className="text-sm font-black text-slate-900 mb-1">{prod.name}</h4>
-                <p className="text-xs text-slate-500 leading-relaxed">{prod.desc}</p>
-              </div>
+          {/* Filtros de Fases */}
+          {productPhases.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
+              <button
+                onClick={() => setSelectedPhaseFilter('ALL')}
+                className={`px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
+                  selectedPhaseFilter === 'ALL'
+                    ? 'bg-slate-900 text-white shadow-md'
+                    : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'
+                }`}
+              >
+                Todos
+              </button>
+              {productPhases.map(phaseName => (
+                <button
+                  key={phaseName}
+                  onClick={() => setSelectedPhaseFilter(phaseName)}
+                  className={`px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
+                    selectedPhaseFilter === phaseName
+                      ? 'bg-slate-900 text-white shadow-md'
+                      : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  {phaseName}
+                </button>
+              ))}
             </div>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
+          )}
+
+          <div className="space-y-3">
+            {filteredProducts.length === 0 ? (
+              <p className="text-sm text-slate-500 italic pl-2">No hay productos recomendados.</p>
+            ) : (
+              filteredProducts.map((prod) => (
+                <div key={prod.id} className="bg-white rounded-[20px] p-5 border border-slate-100 shadow-sm flex justify-between items-start">
+                  <div>
+                    {prod.phase_name && (
+                      <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-1">
+                        {prod.phase_name}
+                      </span>
+                    )}
+                    <h4 className="text-sm font-black text-slate-900 mb-1">{prod.name}</h4>
+                    <p className="text-xs text-slate-500 leading-relaxed">{prod.description}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      </div>
+    );
+  };
 
 
   const PerfilView = () => (
@@ -909,26 +1015,59 @@ export default function App() {
           </div>
 
           <div className="space-y-4">
-            {CONTRAINDICACIONES_DATA.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase())).map(item => (
-              <div key={item.id} className="bg-slate-900/40 border border-slate-800 rounded-[24px] p-5 relative overflow-hidden">
-                <div className={`absolute left-0 top-0 bottom-0 w-1 ${
-                  item.status === 'critical' ? 'bg-red-500' : item.status === 'warning' ? 'bg-amber-400' : 'bg-emerald-500'
-                }`}></div>
-                <div className="flex justify-between items-start mb-3">
-                  <h4 className="font-black text-white">{item.name}</h4>
-                  <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-full ${
-                    item.status === 'critical' ? 'bg-red-500/10 text-red-500' : item.status === 'warning' ? 'bg-amber-400/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-500'
-                  }`}>
-                    Riesgo {item.risk}
-                  </span>
-                </div>
-                <p className="text-xs font-medium text-slate-400 leading-relaxed mb-4">{item.description}</p>
-                <div className="flex items-center space-x-2 text-slate-500">
-                  <Info className="w-3.5 h-3.5" />
-                  <span className="text-[9px] font-black uppercase tracking-widest italic">Análisis Bio-Compatibilidad</span>
-                </div>
+            {planAlerts.length === 0 ? (
+              <div className="text-center py-12 bg-slate-900/20 border border-slate-800 rounded-[24px]">
+                <ShieldAlert className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                <p className="text-xs font-bold text-slate-400">No hay alertas activas en este plan.</p>
               </div>
-            ))}
+            ) : (
+              planAlerts
+                .filter(a => 
+                  a.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                  a.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  (a.contraindication_tags && a.contraindication_tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase())))
+                )
+                .map(item => {
+                  const isDanger = item.type === 'danger';
+                  const isWarning = item.type === 'warning';
+                  const isInfo = item.type === 'info';
+                  const statusColor = isDanger ? 'bg-red-500' : isWarning ? 'bg-amber-500' : isInfo ? 'bg-blue-400' : 'bg-emerald-500';
+                  const badgeColor = isDanger ? 'bg-red-500/10 text-red-400' : isWarning ? 'bg-amber-500/10 text-amber-400' : isInfo ? 'bg-blue-400/10 text-blue-300' : 'bg-emerald-500/10 text-emerald-300';
+                  
+                  return (
+                    <div key={item.id} className="bg-slate-900/40 border border-slate-800 rounded-[24px] p-5 relative overflow-hidden">
+                      <div className={`absolute left-0 top-0 bottom-0 w-1 ${statusColor}`}></div>
+                      <div className={`flex justify-between items-start ${item.associated_product ? 'mb-1' : 'mb-3'}`}>
+                        <h4 className="font-black text-white">{item.title}</h4>
+                        <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-full ${badgeColor}`}>
+                          {item.type === 'danger' ? 'Contraindicación' : item.type === 'warning' ? 'Precaución' : item.type === 'info' ? 'Aviso Clínico' : 'Consejo'}
+                        </span>
+                      </div>
+                      {item.associated_product && (
+                        <div className="text-[10px] text-emerald-400 font-black uppercase tracking-wider mb-3">
+                          Producto: <span className="text-slate-300 font-medium normal-case">{item.associated_product}</span>
+                        </div>
+                      )}
+                      <p className="text-xs font-medium text-slate-400 leading-relaxed mb-4">{item.message}</p>
+                      <div className="flex justify-between items-center text-slate-500">
+                        <div className="flex items-center space-x-2">
+                          <Info className="w-3.5 h-3.5" />
+                          <span className="text-[9px] font-black uppercase tracking-widest italic">Días {item.day_start} al {item.day_end}</span>
+                        </div>
+                        {item.contraindication_tags && item.contraindication_tags.length > 0 && (
+                          <div className="flex gap-1 flex-wrap">
+                            {item.contraindication_tags.map((tag, idx) => (
+                              <span key={idx} className="text-[9px] bg-slate-950 px-1.5 py-0.5 rounded text-slate-400 border border-slate-800/50">
+                                #{tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+            )}
           </div>
         </div>
       )}
