@@ -56,11 +56,6 @@ const PHASES = [
   { id: 3, label: 'FASE 03', title: 'Lavado Renal y Remineralización', description: 'Días 15 al 21. Estimulación de la filtración renal sin desmineralizar.', range: [15, 21], status: 'future', themeColor: 'cyan' }
 ];
 
-const HISTORIAL_PACKS = [
-  { id: 'h1', title: 'Módulo Control de Estrés', date: 'ENE 2026', status: 'Completado', iconColor: 'text-indigo-400', bgGlow: 'bg-indigo-500/10', borderColor: 'border-indigo-500/20' },
-  { id: 'h2', title: 'Módulo Energía & Adaptógenos', date: 'MAY 2026', status: 'Completado', iconColor: 'text-amber-400', bgGlow: 'bg-amber-500/10', borderColor: 'border-amber-500/20' }
-];
-
 // Las alertas y contraindicaciones se cargan dinámicamente desde la tabla plan_alerts en Supabase.
 
 const CONTINGENCIA_DATA = [
@@ -106,6 +101,8 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [subscription, setSubscription] = useState(null);
+  const [subscriptionHistory, setSubscriptionHistory] = useState([]);
+  const [profile, setProfile] = useState(null);
 
   // --- ESTADO GLOBAL DE SEGUIMIENTO (1 a 21 días) ---
   const [currentDay, setCurrentDay] = useState(1);
@@ -126,12 +123,47 @@ export default function App() {
   const [showPillars, setShowPillars] = useState(false);
   const [selectedPhaseFilter, setSelectedPhaseFilter] = useState('ALL');
 
+  // Comprobar y cargar/crear perfil en Supabase
+  const checkProfile = async (userId, userEmail) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        setProfile(data);
+      } else {
+        const newProfile = {
+          user_id: userId,
+          email: userEmail
+        };
+        const { data: insertedData, error: insertErr } = await supabase
+          .from('profiles')
+          .insert([newProfile])
+          .select()
+          .maybeSingle();
+        
+        if (insertErr) throw insertErr;
+        if (insertedData) {
+          setProfile(insertedData);
+        }
+      }
+    } catch (err) {
+      console.error('Error al comprobar/inicializar perfil:', err);
+    }
+  };
+
   // Escucha de sesión de Supabase
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) {
         checkSubscription(session.user.id);
+        checkProfile(session.user.id, session.user.email);
       } else {
         setAuthLoading(false);
       }
@@ -141,8 +173,10 @@ export default function App() {
       setSession(session);
       if (session) {
         checkSubscription(session.user.id);
+        checkProfile(session.user.id, session.user.email);
       } else {
         setSubscription(null);
+        setProfile(null);
         setAuthLoading(false);
       }
     });
@@ -156,36 +190,54 @@ export default function App() {
   const checkSubscription = async (userId) => {
     try {
       setAuthLoading(true);
+
+      // Fetch planes para mapear nombres
+      const { data: plansData } = await supabase.from('plans').select('id, name');
+      const plansMap = {};
+      if (plansData) {
+        plansData.forEach(p => plansMap[p.id] = p.name);
+      }
+
       const { data, error } = await supabase
         .from('user_subscriptions')
         .select('*')
         .eq('user_id', userId)
-        .eq('is_active', true)
-        .gt('expires_at', new Date().toISOString())
-        .order('activated_at', { ascending: false })
-        .limit(1);
+        .order('activated_at', { ascending: false });
 
       if (error) throw error;
 
       if (data && data.length > 0) {
-        const activeSub = data[0];
-        setSubscription(activeSub);
+        const enrichedHistory = data.map(sub => ({
+          ...sub,
+          planTitle: plansMap[sub.plan_id] || 'Módulo Aterpe'
+        }));
+        setSubscriptionHistory(enrichedHistory);
 
-        // Calcular el día actual automáticamente basado en la fecha de activación
-        const startDate = new Date(activeSub.activated_at);
-        const today = new Date();
-        // Ponemos la hora a 00:00 para calcular días completos
-        startDate.setHours(0, 0, 0, 0);
-        today.setHours(0, 0, 0, 0);
-        const diffTime = today.getTime() - startDate.getTime();
-        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
-        
-        // Si el resultado es menor a 1 (por zonas horarias etc), forzamos a 1
-        setCurrentDay(Math.max(1, diffDays));
+        // Encontrar plan activo
+        const activeSub = enrichedHistory.find(sub => sub.is_active && new Date(sub.expires_at) > new Date());
 
-        // Cargar datos de progreso y telemetría si hay suscripción
-        await loadUserData(userId, activeSub.plan_id);
+        if (activeSub) {
+          setSubscription(activeSub);
+
+          // Calcular el día actual automáticamente basado en la fecha de activación
+          const startDate = new Date(activeSub.activated_at);
+          const today = new Date();
+          // Ponemos la hora a 00:00 para calcular días completos
+          startDate.setHours(0, 0, 0, 0);
+          today.setHours(0, 0, 0, 0);
+          const diffTime = today.getTime() - startDate.getTime();
+          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+          
+          // Si el resultado es menor a 1 (por zonas horarias etc), forzamos a 1
+          setCurrentDay(Math.max(1, diffDays));
+
+          // Cargar datos de progreso y telemetría si hay suscripción
+          await loadUserData(userId, activeSub.plan_id);
+        } else {
+          setSubscription(null);
+        }
       } else {
+        setSubscriptionHistory([]);
         setSubscription(null);
       }
     } catch (err) {
@@ -195,79 +247,38 @@ export default function App() {
     }
   };
 
-  // Cargar progreso y bienestar guardado
+  // Cargar progreso y bienestar guardado de forma unificada (1 sola llamada de red)
   const loadUserData = async (userId, planId) => {
     try {
-      // Cargar progreso
-      const { data: progressData, error: progressErr } = await supabase
-        .from('user_progress')
-        .select('day, task_id, completed')
-        .eq('user_id', userId)
-        .eq('plan_id', planId);
-      
-      if (progressErr) throw progressErr;
-
-      const progressObj = {};
-      progressData.forEach(row => {
-        if (!progressObj[row.day]) progressObj[row.day] = {};
-        progressObj[row.day][row.task_id] = row.completed;
+      const { data, error } = await supabase.rpc('get_user_dashboard_data', {
+        input_user_id: userId,
+        input_plan_id: planId
       });
-      setCompletedTasks(progressObj);
 
-      // Cargar telemetría
-      const { data: telemetryData, error: telemetryErr } = await supabase
-        .from('user_telemetry')
-        .select('day, value')
-        .eq('user_id', userId)
-        .eq('plan_id', planId);
+      if (error) throw error;
 
-      if (telemetryErr) throw telemetryErr;
+      if (data) {
+        // 1. Cargar progreso
+        const progressObj = {};
+        (data.progress || []).forEach(row => {
+          if (!progressObj[row.day]) progressObj[row.day] = {};
+          progressObj[row.day][row.task_id] = row.completed;
+        });
+        setCompletedTasks(progressObj);
 
-      const telemetryObj = {};
-      telemetryData.forEach(row => {
-        telemetryObj[row.day] = row.value;
-      });
-      setTelemetryByDay(telemetryObj);
+        // 2. Cargar telemetría
+        const telemetryObj = {};
+        (data.telemetry || []).forEach(row => {
+          telemetryObj[row.day] = row.value;
+        });
+        setTelemetryByDay(telemetryObj);
 
-      // Cargar tareas dinámicas del plan
-      const { data: tasksData, error: tasksErr } = await supabase
-        .from('plan_days_tasks')
-        .select('*')
-        .eq('plan_id', planId)
-        .order('created_at', { ascending: true });
-
-      if (tasksErr) throw tasksErr;
-      setPlanTasks(tasksData || []);
-
-      // Cargar alertas del plan
-      const { data: alertsData, error: alertsErr } = await supabase
-        .from('plan_alerts')
-        .select('*')
-        .eq('plan_id', planId);
-
-      if (alertsErr) throw alertsErr;
-      setPlanAlerts(alertsData || []);
-
-      // Cargar fases del plan
-      const { data: phasesData, error: phasesErr } = await supabase
-        .from('plan_phases')
-        .select('*')
-        .eq('plan_id', planId)
-        .order('day_start', { ascending: true });
-
-      if (phasesErr) throw phasesErr;
-      setPlanPhases(phasesData || []);
-
-      // Cargar productos del plan
-      const { data: productsData, error: productsErr } = await supabase
-        .from('plan_products')
-        .select('*')
-        .eq('plan_id', planId)
-        .order('created_at', { ascending: true });
-
-      if (productsErr) throw productsErr;
-      setPlanProducts(productsData || []);
-
+        // 3. Cargar tareas, alertas, fases y productos
+        setPlanTasks(data.tasks || []);
+        setPlanAlerts(data.alerts || []);
+        setPlanPhases(data.phases || []);
+        setPlanProducts(data.products || []);
+      }
     } catch (err) {
       console.error('Error cargando datos del usuario:', err);
     }
@@ -464,7 +475,7 @@ export default function App() {
         <div>
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Usuario Activo</p>
           <h1 className="text-2xl font-black tracking-tight text-white truncate max-w-[220px]">
-            {session?.user?.email ? session.user.email.split('@')[0] : 'Elena'}.
+            {profile?.first_name ? profile.first_name : (session?.user?.email ? session.user.email.split('@')[0] : 'Usuario')}.
           </h1>
         </div>
         <div className="flex items-center px-4 py-2 bg-slate-900/40 border border-slate-800 rounded-full shadow-sm">
@@ -473,61 +484,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* Selectores Rápidos de Prueba (Fast-Forward) */}
-      <section className="relative z-10 mb-8 bg-slate-900/40 border border-slate-800/80 rounded-[24px] p-4">
-        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 pl-1">Entorno de Prueba de 21 Días</p>
-        <div className="flex items-center justify-between space-x-2">
-          <button 
-            disabled={currentDay <= 1}
-            onClick={() => setCurrentDay(prev => Math.max(1, prev - 1))}
-            className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:text-slate-400"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          
-          <div className="text-center flex-1">
-            <span className="text-xs font-black uppercase tracking-widest text-slate-500">Ajuste de Jornada</span>
-            <div className="flex items-center justify-center space-x-1.5 mt-0.5">
-              <span className={`text-lg font-black ${currentPhase.textColor}`}>DÍA {currentDay}</span>
-              <span className="text-xs font-bold text-slate-600">/ 21</span>
-            </div>
-          </div>
-
-          <button 
-            disabled={currentDay >= 21}
-            onClick={() => setCurrentDay(prev => Math.min(21, prev + 1))}
-            className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:text-slate-400"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Mini Puntos de progreso directo (1 al 21) */}
-        <div className="grid grid-cols-7 gap-1 mt-3 pt-3 border-t border-slate-800/50">
-          {Array.from({ length: 21 }, (_, i) => i + 1).map((dayNum) => {
-            const isSelected = dayNum === currentDay;
-            const progressForDay = getDayProgress(dayNum);
-            let indicatorClass = 'bg-slate-950 border border-slate-800 text-slate-500';
-            if (isSelected) {
-              indicatorClass = `${currentPhase.bgAccent} text-slate-950 font-extrabold`;
-            } else if (progressForDay === 100) {
-              indicatorClass = 'bg-emerald-950 border border-emerald-900 text-emerald-400';
-            } else if (progressForDay > 0) {
-              indicatorClass = 'bg-slate-900 border border-slate-700 text-slate-300';
-            }
-
-            return (
-              <button 
-                key={dayNum} 
-                onClick={() => setCurrentDay(dayNum)}
-                className={`text-[9px] py-1.5 rounded-lg text-center transition-all ${indicatorClass}`}
-              >
-                {dayNum}
-              </button>
-            );
-          })}
-        </div>
-      </section>
 
       {/* Panel de Métricas */}
       <section className="relative z-10 mb-8">
@@ -862,19 +818,72 @@ export default function App() {
       <section className="relative z-10 mb-6">
         <div className="bg-slate-900 border border-slate-800 rounded-[32px] p-6 shadow-2xl relative overflow-hidden flex items-center space-x-6">
           <div className="w-16 h-16 rounded-full bg-slate-950 border-2 border-emerald-500/50 flex items-center justify-center italic font-black text-emerald-500 uppercase">
-            {session?.user?.email ? session.user.email.substring(0, 2) : 'US'}
+            {profile?.first_name ? profile.first_name.substring(0, 2) : (session?.user?.email ? session.user.email.substring(0, 2) : 'US')}
           </div>
           <div className="overflow-hidden">
             <h3 className="text-xl font-black tracking-tight text-white mb-1 truncate max-w-[200px]">
-              {session?.user?.email ? session.user.email.split('@')[0] : 'Usuario'}.
+              {profile?.first_name ? `${profile.first_name} ${profile.last_name || ''}` : (session?.user?.email ? session.user.email.split('@')[0] : 'Usuario')}.
             </h3>
             <p className="text-[9px] font-black uppercase tracking-widest text-emerald-500 flex items-center">
               <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full mr-2 animate-pulse"></span>
-              Verificado
+              {profile?.natura_client_id ? `ID: ${profile.natura_client_id}` : 'Cuenta Online'}
             </p>
           </div>
         </div>
       </section>
+
+      {/* Datos Personales (Natura ERP) */}
+      {profile?.natura_client_id && (
+        <section className="relative z-10 mb-6 animate-in fade-in duration-300">
+          <div className="bg-slate-900/40 border border-slate-800 rounded-[32px] p-6 shadow-xl">
+            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 mb-6">Ficha Natura ERP</p>
+            <div className="space-y-4">
+              {profile.phone && (
+                <div className="flex justify-between items-center text-sm font-black text-white pb-3 border-b border-slate-800/50">
+                  <span className="text-slate-400 text-[10px] uppercase tracking-widest">
+                    Teléfono
+                  </span>
+                  <span>{profile.phone}</span>
+                </div>
+              )}
+              {profile.nif && (
+                <div className="flex justify-between items-center text-sm font-black text-white pb-3 border-b border-slate-800/50">
+                  <span className="text-slate-400 text-[10px] uppercase tracking-widest">
+                    NIF / CIF
+                  </span>
+                  <span>{profile.nif}</span>
+                </div>
+              )}
+              {profile.address && (
+                <div className="flex justify-between items-center text-sm font-black text-white pb-3 border-b border-slate-800/50">
+                  <span className="text-slate-400 text-[10px] uppercase tracking-widest">
+                    Dirección
+                  </span>
+                  <span className="text-right text-xs max-w-[200px] truncate">{profile.address}</span>
+                </div>
+              )}
+              {profile.registration_date && (
+                <div className="flex justify-between items-center text-sm font-black text-white pb-3 border-b border-slate-800/50">
+                  <span className="text-slate-400 text-[10px] uppercase tracking-widest">
+                    Alta Cliente
+                  </span>
+                  <span>{new Date(profile.registration_date).toLocaleDateString('es-ES')}</span>
+                </div>
+              )}
+              {profile.internal_notes && (
+                <div className="pt-2">
+                  <span className="text-slate-400 text-[10px] uppercase tracking-widest block mb-2">
+                    Notas Médicas / Historial
+                  </span>
+                  <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-4 text-xs font-bold text-slate-300 leading-relaxed whitespace-pre-wrap">
+                    {profile.internal_notes}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Datos del Módulo Activo */}
       <section className="relative z-10 mb-6">
@@ -924,17 +933,26 @@ export default function App() {
         <div className="bg-slate-900/40 border border-slate-800 rounded-[32px] p-6">
           <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 mb-4">Historial de Tratamientos</p>
           <div className="space-y-3">
-            {HISTORIAL_PACKS.map(pack => (
-              <div key={pack.id} className="bg-slate-950 border border-slate-800/50 rounded-[20px] p-4 flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${pack.bgGlow} ${pack.borderColor}`}>
-                    <CheckCircle2 className={`w-4 h-4 ${pack.iconColor}`} />
+            {subscriptionHistory.length === 0 ? (
+              <p className="text-slate-500 text-xs text-center py-4">No hay tratamientos previos</p>
+            ) : (
+              subscriptionHistory.map((sub) => {
+                const isActive = sub.is_active && new Date(sub.expires_at) > new Date();
+                const dateText = new Date(sub.activated_at).toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }).toUpperCase().replace('.', '');
+                
+                return (
+                  <div key={sub.id} className="bg-slate-950 border border-slate-800/50 rounded-[20px] p-4 flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${isActive ? 'bg-indigo-500/10 border-indigo-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
+                        <CheckCircle2 className={`w-4 h-4 ${isActive ? 'text-indigo-400' : 'text-emerald-400'}`} />
+                      </div>
+                      <h4 className="text-xs font-black text-white">{sub.planTitle}</h4>
+                    </div>
+                    <span className="text-[8px] font-black text-slate-500 uppercase">{dateText}</span>
                   </div>
-                  <h4 className="text-xs font-black text-white">{pack.title}</h4>
-                </div>
-                <span className="text-[8px] font-black text-slate-500 uppercase">{pack.date}</span>
-              </div>
-            ))}
+                );
+              })
+            )}
           </div>
         </div>
       </section>
