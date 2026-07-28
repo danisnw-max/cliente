@@ -31,7 +31,9 @@ import {
   Droplet,
   Coffee,
   Sparkles,
-  ChevronLeft
+  ChevronLeft,
+  Star,
+  Heart
 } from 'lucide-react';
 
 
@@ -115,6 +117,7 @@ export default function App() {
 
   // --- ESTADOS DE TAREAS Y ALERTAS DE SUPABASE ---
   const [planTasks, setPlanTasks] = useState([]);
+  const [planPillars, setPlanPillars] = useState([]);
   const [planAlerts, setPlanAlerts] = useState([]);
   const [planPhases, setPlanPhases] = useState([]);
   const [planProducts, setPlanProducts] = useState([]);
@@ -278,6 +281,14 @@ export default function App() {
         setPlanAlerts(data.alerts || []);
         setPlanPhases(data.phases || []);
         setPlanProducts(data.products || []);
+        
+        // 4. Cargar pilares dinámicos
+        const { data: pillarsData } = await supabase
+          .from('plan_pillars')
+          .select('*')
+          .eq('plan_id', planId)
+          .order('order_index');
+        setPlanPillars(pillarsData || []);
       }
     } catch (err) {
       console.error('Error cargando datos del usuario:', err);
@@ -484,6 +495,34 @@ export default function App() {
         </div>
       </header>
 
+      {/* Navegación de Progreso (1 al 21) */}
+      <section className="relative z-10 mb-8 bg-slate-900/40 border border-slate-800/80 rounded-[24px] p-4">
+        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 pl-1">Jornadas del Tratamiento</p>
+        <div className="grid grid-cols-7 gap-1">
+          {Array.from({ length: 21 }, (_, i) => i + 1).map((dayNum) => {
+            const isSelected = dayNum === currentDay;
+            const progressForDay = getDayProgress(dayNum);
+            let indicatorClass = 'bg-slate-950 border border-slate-800 text-slate-500';
+            if (isSelected) {
+              indicatorClass = `${currentPhase.bgAccent} text-slate-950 font-extrabold`;
+            } else if (progressForDay === 100) {
+              indicatorClass = 'bg-emerald-950 border border-emerald-900 text-emerald-400';
+            } else if (progressForDay > 0) {
+              indicatorClass = 'bg-slate-900 border border-slate-700 text-slate-300';
+            }
+
+            return (
+              <button 
+                key={dayNum} 
+                onClick={() => setCurrentDay(dayNum)}
+                className={`text-[9px] py-1.5 rounded-lg text-center transition-all ${indicatorClass}`}
+              >
+                {dayNum}
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       {/* Panel de Métricas */}
       <section className="relative z-10 mb-8">
@@ -555,26 +594,32 @@ export default function App() {
 
           {showPillars && (
             <div className="mt-5 space-y-4 pt-4 border-t border-slate-800/50 animate-in slide-in-from-top-2 duration-300">
-              <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-2xl">
-                <h4 className="text-xs font-black uppercase tracking-widest text-indigo-400 mb-1 flex items-center">
-                  <Droplet className="w-4 h-4 mr-1.5" /> Hidratación de Precisión
-                </h4>
-                <p className="text-xs text-slate-400 leading-relaxed">Mínimo de 2 a 2.5 litros de agua de mineralización débil al día para garantizar la eliminación y dilución efectiva de toxinas.</p>
-              </div>
-
-              <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-2xl">
-                <h4 className="text-xs font-black uppercase tracking-widest text-emerald-400 mb-1 flex items-center">
-                  <Activity className="w-4 h-4 mr-1.5" /> Complejo Motor Migratorio (CMM)
-                </h4>
-                <p className="text-xs text-slate-400 leading-relaxed">Ayuno fisiológico estricto de 12 a 14 horas de reposo nocturno. Activa los mecanismos automáticos de limpieza del tracto digestivo superior.</p>
-              </div>
-
-              <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-2xl">
-                <h4 className="text-xs font-black uppercase tracking-widest text-amber-500 mb-1 flex items-center">
-                  <AlertTriangle className="w-4 h-4 mr-1.5" /> Restricciones Nutricionales Críticas
-                </h4>
-                <p className="text-xs text-slate-400 leading-relaxed">Suspensión total de azúcares refinados, alcohol, ultraprocesados, harinas y grasas hidrogenadas. Priorizar caldos depurativos de crucíferas.</p>
-              </div>
+              {planPillars.map((pillar) => {
+                const ICON_MAP = { Droplet, Activity, AlertTriangle, Crosshair, Star, Heart };
+                const COLOR_MAP = {
+                  'Droplet': 'text-indigo-400',
+                  'Activity': 'text-emerald-400',
+                  'AlertTriangle': 'text-amber-500',
+                  'Crosshair': 'text-rose-400',
+                  'Star': 'text-yellow-400',
+                  'Heart': 'text-red-400'
+                };
+                
+                const Icon = ICON_MAP[pillar.icon] || Droplet;
+                const textColor = COLOR_MAP[pillar.icon] || 'text-indigo-400';
+                
+                return (
+                  <div key={pillar.id} className="p-4 bg-slate-950/60 border border-slate-800 rounded-2xl">
+                    <h4 className={`text-xs font-black uppercase tracking-widest ${textColor} mb-1 flex items-center`}>
+                      <Icon className="w-4 h-4 mr-1.5" /> {pillar.title}
+                    </h4>
+                    <p className="text-xs text-slate-400 leading-relaxed">{pillar.description}</p>
+                  </div>
+                );
+              })}
+              {planPillars.length === 0 && (
+                <div className="text-center text-slate-500 text-xs italic py-4">No hay pilares configurados.</div>
+              )}
             </div>
           )}
         </div>
