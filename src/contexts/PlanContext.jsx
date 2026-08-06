@@ -24,6 +24,7 @@ export const PlanProvider = ({ children }) => {
   const [consolidatedTelemetry, setConsolidatedTelemetry] = useState({});
   const [consolidatedProgress, setConsolidatedProgress] = useState({});
   const [consolidatedDays, setConsolidatedDays] = useState({});
+  const [todayTasks, setTodayTasks] = useState([]);
 
   // --- ESTADOS DE TAREAS Y ALERTAS DE SUPABASE ---
   const [planTasks, setPlanTasks] = useState([]);
@@ -171,6 +172,7 @@ export const PlanProvider = ({ children }) => {
   const loadConsolidatedData = async (userId, activeSubs) => {
     if (!activeSubs || activeSubs.length === 0) {
       setConsolidatedAgenda([]);
+      setTodayTasks([]);
       return;
     }
     try {
@@ -178,6 +180,7 @@ export const PlanProvider = ({ children }) => {
       let cTelemetry = {};
       let cProgress = {};
       let cDays = {};
+      let tTasks = [];
 
       for (const sub of activeSubs) {
         const { data, error } = await supabase.rpc('get_user_dashboard_data', {
@@ -212,6 +215,19 @@ export const PlanProvider = ({ children }) => {
         today.setHours(0, 0, 0, 0);
         const diffDays = Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
         const chronologicalDay = Math.max(1, diffDays);
+
+        if (chronologicalDay <= 21) {
+          const realTodayTasks = tasksByDay[chronologicalDay] || [];
+          realTodayTasks.forEach(t => {
+            tTasks.push({
+              ...t,
+              plan_id: sub.plan_id,
+              plan_name: sub.planTitle,
+              current_day: chronologicalDay,
+              is_completed: !!(progressObj[chronologicalDay] && progressObj[chronologicalDay][t.task_id])
+            });
+          });
+        }
 
         let calculatedDay = 1;
         for (let d = 1; d < chronologicalDay; d++) {
@@ -255,10 +271,12 @@ export const PlanProvider = ({ children }) => {
       }
 
       agendaItems.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+      tTasks.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
       setConsolidatedAgenda(agendaItems);
       setConsolidatedTelemetry(cTelemetry);
       setConsolidatedProgress(cProgress);
       setConsolidatedDays(cDays);
+      setTodayTasks(tTasks);
     } catch (err) {
       console.error('Error cargando agenda consolidada:', err);
     }
@@ -615,6 +633,7 @@ export const PlanProvider = ({ children }) => {
     consolidatedAgenda,
     consolidatedTelemetry,
     consolidatedDays,
+    todayTasks,
     toggleConsolidatedTask,
     setConsolidatedTelemetryValue,
     checkSubscription: checkSubscriptionManual

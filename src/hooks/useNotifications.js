@@ -42,18 +42,38 @@ function getSafeNotificationPermission() {
   return 'unsupported';
 }
 
-export function useNotifications(currentPhaseTasks = [], currentDayCompletions = {}, userId) {
+export function useNotifications(todayTasks = [], userId) {
   const [permission, setPermission] = useState(() => getSafeNotificationPermission());
   const [swRegistration, setSwRegistration] = useState(null);
   const notifiedTasks = useRef(new Set());
 
-  // 1. Registrar Service Worker de forma segura
+  // 1. Registrar Service Worker de forma segura y asegurar suscripción Push
   useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       navigator.serviceWorker
         .register('/sw.js')
-        .then((reg) => {
+        .then(async (reg) => {
           setSwRegistration(reg);
+          if (getSafeNotificationPermission() === 'granted' && reg.pushManager) {
+            try {
+              const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+              let subscription = await reg.pushManager.getSubscription().catch(() => null);
+              if (!subscription && vapidPublicKey) {
+                const convertedKey = urlBase64ToUint8Array(vapidPublicKey);
+                if (convertedKey) {
+                  subscription = await reg.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: convertedKey
+                  }).catch(() => null);
+                }
+              }
+              if (subscription) {
+                await savePushSubscription(subscription);
+              }
+            } catch (pErr) {
+              console.warn('Verificación automática de suscripción push:', pErr);
+            }
+          }
         })
         .catch((err) => {
           console.warn('Service Worker no registrado (modo estándar):', err);
@@ -140,7 +160,7 @@ export function useNotifications(currentPhaseTasks = [], currentDayCompletions =
   // 4. Verificación en tiempo real sin crasheos en dispositivos móviles
   useEffect(() => {
     if (permission !== 'granted') return;
-    if (!currentPhaseTasks || !Array.isArray(currentPhaseTasks) || currentPhaseTasks.length === 0) return;
+    if (!todayTasks || !Array.isArray(todayTasks) || todayTasks.length === 0) return;
 
     const checkAlarms = () => {
       try {
@@ -148,7 +168,7 @@ export function useNotifications(currentPhaseTasks = [], currentDayCompletions =
         const currentHours = now.getHours();
         const currentMinutes = now.getMinutes();
 
-        currentPhaseTasks.forEach((task) => {
+        todayTasks.forEach((task) => {
           if (!task || !task.time) return;
 
           let timeStr = task.time;
@@ -158,9 +178,10 @@ export function useNotifications(currentPhaseTasks = [], currentDayCompletions =
 
           const [taskH, taskM] = timeStr.split(':').map(Number);
           const isPastOrPresent = (currentHours > taskH) || (currentHours === taskH && currentMinutes >= taskM);
-          const isCompleted = currentDayCompletions && currentDayCompletions[task.task_id];
+          const isCompleted = !!task.is_completed;
+          const uniqueId = `${task.plan_id || 'plan'}-${task.task_id || task.id}`;
 
-          if (isPastOrPresent && !isCompleted && !notifiedTasks.current.has(task.id)) {
+          if (isPastOrPresent && !isCompleted && !notifiedTasks.current.has(uniqueId)) {
             let shown = false;
 
             try {
@@ -169,7 +190,7 @@ export function useNotifications(currentPhaseTasks = [], currentDayCompletions =
                   body: `Es hora de tu tarea: ${task.title}`,
                   icon: '/logo.svg',
                   badge: '/logo.svg',
-                  tag: `task-${task.id}`,
+                  tag: `task-${uniqueId}`,
                   renotify: true
                 });
                 shown = true;
@@ -191,7 +212,7 @@ export function useNotifications(currentPhaseTasks = [], currentDayCompletions =
               }
             }
 
-            notifiedTasks.current.add(task.id);
+            notifiedTasks.current.add(uniqueId);
           }
         });
       } catch (err) {
@@ -203,7 +224,7 @@ export function useNotifications(currentPhaseTasks = [], currentDayCompletions =
     const interval = setInterval(checkAlarms, 30000);
 
     return () => clearInterval(interval);
-  }, [permission, currentPhaseTasks, currentDayCompletions, swRegistration]);
+  }, [permission, todayTasks, swRegistration]);
 
   return { permission, requestPermission };
 }

@@ -1,0 +1,14 @@
+{
+  "name": "aterpe-push-sender",
+  "version": "1.0.0",
+  "description": "Servicio emisor de notificaciones Push en segundo plano para Aterpe",
+  "main": "send_push_notifications.js",
+  "type": "module",
+  "scripts": {
+    "start": "node send_push_notifications.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "web-push": "^3.6.7"
+  }
+}

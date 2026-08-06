@@ -26,14 +26,14 @@ export default function DashboardView({ onNavigate }) {
     completedTasks,
     planPillars,
     getPhaseConfig,
-    getDayProgress
+    getDayProgress,
+    todayTasks
   } = usePlan();
 
   const [showPillars, setShowPillars] = useState(false);
 
   const currentPhase = getPhaseConfig(currentDay) || {};
-  const currentPhaseTasks = currentPhase.tasks || [];
-  const { permission: notifPermission, requestPermission: requestNotifPermission } = useNotifications(currentPhaseTasks, completedTasks[currentDay]);
+  const { permission: notifPermission, requestPermission: requestNotifPermission } = useNotifications(todayTasks);
   const progress = getDayProgress(currentDay);
 
   return (
