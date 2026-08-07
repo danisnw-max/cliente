@@ -229,33 +229,7 @@ export const PlanProvider = ({ children }) => {
           });
         }
 
-        let calculatedDay = 1;
-        for (let d = 1; d < chronologicalDay; d++) {
-          const dayTasks = tasksByDay[d] || [];
-          if (dayTasks.length > 0) {
-            const dayProgress = progressObj[d] || {};
-            const completedCount = dayTasks.filter(t => dayProgress[t.task_id]).length;
-            if (completedCount === 0) break;
-          }
-          calculatedDay = d + 1;
-        }
-
-        for (let d = 21; d >= calculatedDay; d--) {
-          const dayTasks = tasksByDay[d] || [];
-          if (dayTasks.length > 0) {
-            const dayProgress = progressObj[d] || {};
-            const completedCount = dayTasks.filter(t => dayProgress[t.task_id]).length;
-            if (completedCount > 0) {
-              calculatedDay = d;
-              if (completedCount === dayTasks.length && d < 21) {
-                calculatedDay = d + 1;
-              }
-              break;
-            }
-          }
-        }
-        
-        const finalDay = Math.min(21, Math.max(1, calculatedDay));
+        let finalDay = Math.min(21, chronologicalDay);
         cDays[sub.plan_id] = finalDay;
 
         const dayTasks = tasksByDay[finalDay] || [];
@@ -331,36 +305,7 @@ export const PlanProvider = ({ children }) => {
         const diffDays = Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
         const chronologicalDay = Math.max(1, diffDays);
 
-        let calculatedDay = 1;
-
-        for (let d = 1; d < chronologicalDay; d++) {
-          const dayTasks = tasksByDay[d] || [];
-          if (dayTasks.length > 0) {
-            const dayProgress = progressObj[d] || {};
-            const completedCount = dayTasks.filter(t => dayProgress[t.task_id]).length;
-            if (completedCount === 0) {
-              break;
-            }
-          }
-          calculatedDay = d + 1;
-        }
-
-        for (let d = 21; d >= calculatedDay; d--) {
-          const dayTasks = tasksByDay[d] || [];
-          if (dayTasks.length > 0) {
-            const dayProgress = progressObj[d] || {};
-            const completedCount = dayTasks.filter(t => dayProgress[t.task_id]).length;
-            if (completedCount > 0) {
-              calculatedDay = d;
-              if (completedCount === dayTasks.length && d < 21) {
-                calculatedDay = d + 1;
-              }
-              break;
-            }
-          }
-        }
-
-        setCurrentDay(Math.min(21, Math.max(1, calculatedDay)));
+        setCurrentDay(Math.min(21, chronologicalDay));
       }
     } catch (err) {
       console.error('Error cargando datos del usuario:', err);
