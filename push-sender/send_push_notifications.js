@@ -121,4 +121,13 @@ async function dispatchPushNotifications() {
   }
 }
 
-dispatchPushNotifications();
+const isDaemon = process.argv.includes('--daemon');
+
+if (isDaemon) {
+  console.log('🚀 Daemon de Notificaciones Push Aterpe iniciado (comprobando cada 60s)...');
+  dispatchPushNotifications();
+  setInterval(dispatchPushNotifications, 60000);
+} else {
+  dispatchPushNotifications();
+}
+

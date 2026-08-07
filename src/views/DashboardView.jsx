@@ -33,7 +33,7 @@ export default function DashboardView({ onNavigate }) {
   const [showPillars, setShowPillars] = useState(false);
 
   const currentPhase = getPhaseConfig(currentDay) || {};
-  const { permission: notifPermission, requestPermission: requestNotifPermission } = useNotifications(todayTasks);
+  const { permission: notifPermission, requestPermission: requestNotifPermission } = useNotifications(todayTasks, session?.user?.id);
   const progress = getDayProgress(currentDay);
 
   return (

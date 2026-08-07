@@ -5,7 +5,8 @@
   "main": "send_push_notifications.js",
   "type": "module",
   "scripts": {
-    "start": "node send_push_notifications.js"
+    "start": "node send_push_notifications.js",
+    "daemon": "node send_push_notifications.js --daemon"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

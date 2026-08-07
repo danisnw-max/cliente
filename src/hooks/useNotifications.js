@@ -84,14 +84,17 @@ export function useNotifications(todayTasks = [], userId) {
   }, []);
 
   // 2. Guardar suscripción Push en Supabase
-  const savePushSubscription = async (subscription) => {
+  const savePushSubscription = async (subscription, explicitUserId) => {
     if (!subscription) return;
     try {
       const subJSON = subscription.toJSON();
       const { data: sessionData } = await supabase.auth.getSession();
-      const currentUserId = userId || sessionData?.session?.user?.id;
+      const currentUserId = explicitUserId || userId || sessionData?.session?.user?.id;
 
-      if (!currentUserId) return;
+      if (!currentUserId) {
+        console.warn('Suscripción Push aplazada: Esperando identificador de usuario...');
+        return;
+      }
 
       const { error } = await supabase.from('user_push_subscriptions').upsert(
         {
@@ -105,7 +108,9 @@ export function useNotifications(todayTasks = [], userId) {
       );
 
       if (error) {
-        console.warn('Nota: Guardado de Push omitido (requiere tabla user_push_subscriptions):', error.message);
+        console.warn('Nota: Guardado de Push omitido en Supabase:', error.message);
+      } else {
+        console.log('✅ Suscripción Web Push registrada con éxito para usuario:', currentUserId);
       }
     } catch (err) {
       console.warn('Suscripción Push no persistida:', err);
@@ -156,6 +161,18 @@ export function useNotifications(todayTasks = [], userId) {
       console.error('Error solicitando permisos de notificación:', err);
     }
   };
+  // Sincronizar automáticamente cuando el usuario inicie sesión
+  useEffect(() => {
+    if (!userId || permission !== 'granted' || typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.ready.then(async (reg) => {
+      if (reg && reg.pushManager) {
+        const sub = await reg.pushManager.getSubscription().catch(() => null);
+        if (sub) {
+          await savePushSubscription(sub, userId);
+        }
+      }
+    });
+  }, [userId, permission]);
 
   // 4. Verificación en tiempo real sin crasheos en dispositivos móviles
   useEffect(() => {
